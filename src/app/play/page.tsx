@@ -194,6 +194,11 @@ function PlayPageClient() {
   const artPlayerRef = useRef<any>(null);
   const artRef = useRef<HTMLDivElement | null>(null);
 
+  // 长按右键倍速播放相关
+  const rightLongPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isRightLongPressRef = useRef(false);
+  const preRightLongPressRateRef = useRef(1.0);
+
   // -----------------------------------------------------------------------------
   // 工具函数（Utils）
   // -----------------------------------------------------------------------------
@@ -886,6 +891,35 @@ function PlayPageClient() {
     };
   }, []);
 
+  // 右键松手处理：单击快进 / 长按恢复原速
+  useEffect(() => {
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key !== 'ArrowRight' || e.altKey) return;
+      e.preventDefault();
+
+      if (rightLongPressTimerRef.current) {
+        clearTimeout(rightLongPressTimerRef.current);
+        rightLongPressTimerRef.current = null;
+      }
+
+      const art = artPlayerRef.current;
+      if (!art) return;
+
+      if (isRightLongPressRef.current) {
+        art.playbackRate = preRightLongPressRateRef.current;
+        art.notice.show = '恢复原速';
+        isRightLongPressRef.current = false;
+      } else {
+        art.currentTime += 10;
+      }
+    };
+
+    document.addEventListener('keyup', handleKeyUp);
+    return () => {
+      document.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
+
   // ---------------------------------------------------------------------------
   // 集数切换
   // ---------------------------------------------------------------------------
@@ -960,14 +994,19 @@ function PlayPageClient() {
       }
     }
 
-    // 右箭头 = 快进
-    if (!e.altKey && e.key === 'ArrowRight') {
-      if (
-        artPlayerRef.current &&
-        artPlayerRef.current.currentTime < artPlayerRef.current.duration - 5
-      ) {
-        artPlayerRef.current.currentTime += 10;
+    // 右键：按下时启动长按检测（单击快进10秒 / 长按2倍速）
+    if (!e.altKey && e.key === 'ArrowRight' && !e.repeat) {
+      const art = artPlayerRef.current;
+      if (art && art.currentTime < art.duration - 5) {
         e.preventDefault();
+        preRightLongPressRateRef.current = art.playbackRate;
+        isRightLongPressRef.current = false;
+
+        rightLongPressTimerRef.current = setTimeout(() => {
+          isRightLongPressRef.current = true;
+          art.playbackRate = 2;
+          art.notice.show = '2x 倍速播放';
+        }, 400);
       }
     }
 
